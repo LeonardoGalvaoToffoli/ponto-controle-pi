@@ -46,6 +46,10 @@ public class SecurityConfig {
                         .hasRole("GERENTE")
                         .requestMatchers(HttpMethod.GET, "/api/v1/employees/*/photo")
                         .hasAuthority(AuthConfiguration.AUTHORITY_ACCESS)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/attendance")
+                        .hasRole("FUNCIONARIO")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/attendance", "/api/v1/attendance/*/photo")
+                        .hasAuthority(AuthConfiguration.AUTHORITY_ACCESS)
                         .anyRequest()
                         .hasAuthority(AuthConfiguration.AUTHORITY_ACCESS))
                 .exceptionHandling(exceptions -> exceptions

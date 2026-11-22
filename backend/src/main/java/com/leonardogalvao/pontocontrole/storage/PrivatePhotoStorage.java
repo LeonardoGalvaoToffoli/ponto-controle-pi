@@ -14,6 +14,9 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.UUID;
@@ -30,8 +33,24 @@ public class PrivatePhotoStorage {
     }
 
     public StoredPhoto storeProfilePhoto(UUID employeeId, MultipartFile photo) {
-        byte[] content = validatedJpeg(photo);
+        PhotoPayload payload = validateJpeg(photo);
         String key = "profiles/" + employeeId + ".jpg";
+        store(key, payload.content());
+        return new StoredPhoto(key);
+    }
+
+    public StoredPhoto storeAttendancePhoto(UUID employeeId, UUID attendanceId, PhotoPayload payload) {
+        String key = "attendance/" + employeeId + "/" + attendanceId + ".jpg";
+        store(key, payload.content());
+        return new StoredPhoto(key);
+    }
+
+    public PhotoPayload validateJpeg(MultipartFile photo) {
+        byte[] content = validatedJpegBytes(photo);
+        return new PhotoPayload(content, sha256(content));
+    }
+
+    private void store(String key, byte[] content) {
         Path destination = resolveKey(key);
 
         try {
@@ -43,7 +62,6 @@ public class PrivatePhotoStorage {
             } finally {
                 Files.deleteIfExists(temporary);
             }
-            return new StoredPhoto(key);
         } catch (IOException exception) {
             throw new ApiException(
                     HttpStatus.INTERNAL_SERVER_ERROR,
@@ -74,7 +92,7 @@ public class PrivatePhotoStorage {
         }
     }
 
-    private byte[] validatedJpeg(MultipartFile photo) {
+    private byte[] validatedJpegBytes(MultipartFile photo) {
         if (photo == null || photo.isEmpty() || photo.getSize() > MAX_PHOTO_BYTES) {
             throw invalidPhoto();
         }
@@ -142,6 +160,14 @@ public class PrivatePhotoStorage {
         }
     }
 
+    private String sha256(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 indisponível", exception);
+        }
+    }
+
     private ApiException invalidPhoto() {
         return new ApiException(
                 HttpStatus.UNPROCESSABLE_ENTITY,
@@ -157,5 +183,8 @@ public class PrivatePhotoStorage {
     }
 
     public record StoredPhoto(String key) {
+    }
+
+    public record PhotoPayload(byte[] content, String sha256) {
     }
 }

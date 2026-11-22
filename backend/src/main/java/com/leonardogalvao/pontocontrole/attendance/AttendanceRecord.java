@@ -72,11 +72,74 @@ public class AttendanceRecord {
     protected AttendanceRecord() {
     }
 
+    public AttendanceRecord(
+            UUID id,
+            UUID employeeId,
+            AttendanceType type,
+            Instant recordedAt,
+            LocalDate workDate,
+            Instant gpsCapturedAt,
+            BigDecimal latitude,
+            BigDecimal longitude,
+            BigDecimal accuracyMeters,
+            BigDecimal distanceMeters,
+            String photoKey,
+            String photoSha256,
+            UUID idempotencyKey,
+            String requestFingerprint) {
+        this.id = id;
+        this.employeeId = employeeId;
+        this.type = type;
+        this.recordedAt = recordedAt;
+        this.workDate = workDate;
+        this.gpsCapturedAt = gpsCapturedAt;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.accuracyMeters = accuracyMeters;
+        this.distanceMeters = distanceMeters;
+        this.photoKey = photoKey;
+        this.photoSha256 = photoSha256;
+        this.idempotencyKey = idempotencyKey;
+        this.requestFingerprint = requestFingerprint;
+    }
+
+    public UUID getId() {
+        return id;
+    }
+
     public UUID getEmployeeId() {
         return employeeId;
     }
 
     public AttendanceType getType() {
         return type;
+    }
+
+    public Instant getRecordedAt() {
+        return recordedAt;
+    }
+
+    public LocalDate getWorkDate() {
+        return workDate;
+    }
+
+    public BigDecimal getDistanceMeters() {
+        return distanceMeters;
+    }
+
+    public String getPhotoKey() {
+        return photoKey;
+    }
+
+    public String getPhotoSha256() {
+        return photoSha256;
+    }
+
+    public UUID getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public String getRequestFingerprint() {
+        return requestFingerprint;
     }
 }

@@ -35,6 +35,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -435,7 +436,13 @@ class PontoControleApplicationIntegrationTest {
                 managerAccessToken(),
                 UUID.randomUUID().toString());
         assertThat(employees.statusCode()).isEqualTo(200);
-        assertThat(employees.body()).contains(email, registration, "\"enteredToday\":0");
+        JsonNode listedEmployee = objectMapper.readTree(employees.body()).get("items").valueStream()
+                .filter(item -> item.get("id").asText().equals(employeeId.toString()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(listedEmployee.get("email").asText()).isEqualTo(email);
+        assertThat(listedEmployee.get("registrationNumber").asText()).isEqualTo(registration);
+        assertThat(listedEmployee.get("todayStatus").asText()).isEqualTo("SEM_REGISTRO");
 
         HttpResponse<String> firstLogin = postJson(
                 "/api/v1/auth/login",
@@ -539,6 +546,156 @@ class PontoControleApplicationIntegrationTest {
         assertThat(profilePhotoCount()).isEqualTo(photosBeforeRejections);
     }
 
+    @Test
+    void attendanceFlowIsSequentialIdempotentPrivateAndVisibleInHistory() throws Exception {
+        EmployeeLogin employee = createEmployeeWithAccess("FLUXO");
+        byte[] evidence = jpeg();
+
+        HttpResponse<String> exitBeforeEntry = postAttendance(
+                employee.token(),
+                UUID.randomUUID(),
+                attendanceMetadata("SAIDA", Instant.now(), "5"),
+                evidence);
+        assertThat(exitBeforeEntry.statusCode()).isEqualTo(409);
+        assertThat(objectMapper.readTree(exitBeforeEntry.body()).get("code").asText())
+                .isEqualTo("INVALID_SEQUENCE");
+
+        UUID entryKey = UUID.randomUUID();
+        Instant capturedAt = Instant.now().minusSeconds(58);
+        String entryMetadata = attendanceMetadata("ENTRADA", capturedAt, "5.0");
+        HttpResponse<String> entry = postAttendance(employee.token(), entryKey, entryMetadata, evidence);
+        assertThat(entry.statusCode()).isEqualTo(201);
+        JsonNode entryBody = objectMapper.readTree(entry.body());
+        String entryId = entryBody.get("id").asText();
+        String recordedAt = entryBody.get("recordedAt").asText();
+        assertThat(entryBody.get("distanceMeters").decimalValue()).isEqualByComparingTo("0.000");
+
+        Thread.sleep(3_500);
+        HttpResponse<String> replay = postAttendance(employee.token(), entryKey, entryMetadata, evidence);
+        assertThat(replay.statusCode()).isEqualTo(200);
+        assertThat(objectMapper.readTree(replay.body()).get("id").asText()).isEqualTo(entryId);
+        assertThat(objectMapper.readTree(replay.body()).get("recordedAt").asText()).isEqualTo(recordedAt);
+
+        HttpResponse<String> changedReplay = postAttendance(
+                employee.token(),
+                entryKey,
+                attendanceMetadata("ENTRADA", capturedAt, "6"),
+                evidence);
+        assertThat(changedReplay.statusCode()).isEqualTo(409);
+        assertThat(objectMapper.readTree(changedReplay.body()).get("code").asText())
+                .isEqualTo("IDEMPOTENCY_CONFLICT");
+
+        HttpResponse<String> duplicateEntry = postAttendance(
+                employee.token(),
+                UUID.randomUUID(),
+                attendanceMetadata("ENTRADA", Instant.now(), "5"),
+                evidence);
+        assertThat(duplicateEntry.statusCode()).isEqualTo(409);
+
+        HttpResponse<String> exit = postAttendance(
+                employee.token(),
+                UUID.randomUUID(),
+                attendanceMetadata("SAIDA", Instant.now(), "5"),
+                evidence);
+        assertThat(exit.statusCode()).isEqualTo(201);
+        String exitId = objectMapper.readTree(exit.body()).get("id").asText();
+
+        HttpResponse<String> ownHistory = get(
+                "/api/v1/attendance",
+                employee.token(),
+                UUID.randomUUID().toString());
+        assertThat(ownHistory.statusCode()).isEqualTo(200);
+        JsonNode historyBody = objectMapper.readTree(ownHistory.body());
+        assertThat(historyBody.get("totalItems").asLong()).isEqualTo(2);
+        assertThat(historyBody.get("items").get(0).get("id").asText()).isEqualTo(exitId);
+
+        HttpResponse<String> managerHistory = get(
+                "/api/v1/attendance?employeeId=" + employee.id(),
+                managerAccessToken(),
+                UUID.randomUUID().toString());
+        assertThat(managerHistory.statusCode()).isEqualTo(200);
+        assertThat(objectMapper.readTree(managerHistory.body()).get("totalItems").asLong()).isEqualTo(2);
+
+        HttpResponse<String> forbiddenFilter = get(
+                "/api/v1/attendance?employeeId=" + employee.id(),
+                employee.token(),
+                UUID.randomUUID().toString());
+        assertThat(forbiddenFilter.statusCode()).isEqualTo(403);
+
+        HttpResponse<byte[]> ownEvidence = getBytes(
+                "/api/v1/attendance/" + entryId + "/photo",
+                employee.token(),
+                UUID.randomUUID().toString());
+        assertThat(ownEvidence.statusCode()).isEqualTo(200);
+        assertThat(ownEvidence.body()).isEqualTo(evidence);
+        assertThat(ownEvidence.headers().firstValue("Cache-Control")).contains("no-store");
+
+        EmployeeLogin otherEmployee = createEmployeeWithAccess("OUTRO");
+        HttpResponse<byte[]> hiddenEvidence = getBytes(
+                "/api/v1/attendance/" + entryId + "/photo",
+                otherEmployee.token(),
+                UUID.randomUUID().toString());
+        assertThat(hiddenEvidence.statusCode()).isEqualTo(404);
+
+        HttpResponse<String> me = get("/api/v1/me", employee.token(), UUID.randomUUID().toString());
+        assertThat(me.body()).contains("SAIDA_REGISTRADA");
+    }
+
+    @Test
+    void attendanceRejectsInvalidGpsAndSerializesConcurrentEntries() throws Exception {
+        EmployeeLogin validationEmployee = createEmployeeWithAccess("GPS");
+        byte[] evidence = jpeg();
+
+        HttpResponse<String> inaccurate = postAttendance(
+                validationEmployee.token(),
+                UUID.randomUUID(),
+                attendanceMetadata("ENTRADA", Instant.now(), "50.001"),
+                evidence);
+        assertErrorCode(inaccurate, 422, "GPS_INACCURATE");
+
+        HttpResponse<String> stale = postAttendance(
+                validationEmployee.token(),
+                UUID.randomUUID(),
+                attendanceMetadata("ENTRADA", Instant.now().minusSeconds(61), "5"),
+                evidence);
+        assertErrorCode(stale, 422, "GPS_STALE");
+
+        HttpResponse<String> outOfRange = postAttendance(
+                validationEmployee.token(),
+                UUID.randomUUID(),
+                """
+                        {"type":"ENTRADA","latitude":0,"longitude":0,"accuracyMeters":5,"capturedAt":"%s"}
+                        """.formatted(Instant.now()),
+                evidence);
+        assertErrorCode(outOfRange, 422, "GPS_OUT_OF_RANGE");
+
+        HttpResponse<String> managerForbidden = postAttendance(
+                managerAccessToken(),
+                UUID.randomUUID(),
+                attendanceMetadata("ENTRADA", Instant.now(), "5"),
+                evidence);
+        assertThat(managerForbidden.statusCode()).isEqualTo(403);
+
+        EmployeeLogin concurrentEmployee = createEmployeeWithAccess("CONCORRENTE");
+        String metadata = attendanceMetadata("ENTRADA", Instant.now(), "5");
+        CompletableFuture<HttpResponse<String>> first = CompletableFuture.supplyAsync(
+                () -> uncheckedAttendance(concurrentEmployee.token(), UUID.randomUUID(), metadata, evidence));
+        CompletableFuture<HttpResponse<String>> second = CompletableFuture.supplyAsync(
+                () -> uncheckedAttendance(concurrentEmployee.token(), UUID.randomUUID(), metadata, evidence));
+
+        List<Integer> statuses = List.of(first.join().statusCode(), second.join().statusCode())
+                .stream()
+                .sorted()
+                .toList();
+        assertThat(statuses).containsExactly(201, 409);
+
+        HttpResponse<String> history = get(
+                "/api/v1/attendance",
+                concurrentEmployee.token(),
+                UUID.randomUUID().toString());
+        assertThat(objectMapper.readTree(history.body()).get("totalItems").asLong()).isEqualTo(1);
+    }
+
     private String managerAccessToken() throws Exception {
         HttpResponse<String> login = postJson(
                 "/api/v1/auth/login",
@@ -634,6 +791,99 @@ class PontoControleApplicationIntegrationTest {
         return HttpClient.newHttpClient().send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> postAttendance(
+            String token,
+            UUID idempotencyKey,
+            String metadata,
+            byte[] photo) throws Exception {
+        String boundary = "PontoControle-" + UUID.randomUUID();
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        body.write(("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"metadata\"\r\n"
+                + "Content-Type: application/json\r\n\r\n"
+                + metadata + "\r\n"
+                + "--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"photo\"; filename=\"evidence.jpg\"\r\n"
+                + "Content-Type: image/jpeg\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+        body.write(photo);
+        body.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://127.0.0.1:" + port + "/api/v1/attendance"))
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .header("Authorization", "Bearer " + token)
+                .header("Idempotency-Key", idempotencyKey.toString())
+                .header("X-Request-Id", UUID.randomUUID().toString())
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
+                .build();
+        return HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> uncheckedAttendance(
+            String token,
+            UUID idempotencyKey,
+            String metadata,
+            byte[] photo) {
+        try {
+            return postAttendance(token, idempotencyKey, metadata, photo);
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private String attendanceMetadata(String type, Instant capturedAt, String accuracy) {
+        return """
+                {
+                  "type":"%s",
+                  "latitude":-23.55052,
+                  "longitude":-46.63331,
+                  "accuracyMeters":%s,
+                  "capturedAt":"%s"
+                }
+                """.formatted(type, accuracy, capturedAt);
+    }
+
+    private EmployeeLogin createEmployeeWithAccess(String prefix) throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String email = prefix.toLowerCase(java.util.Locale.ROOT) + "-" + suffix + "@empresa.local";
+        String registration = prefix + "-" + suffix.toUpperCase(java.util.Locale.ROOT);
+        String temporaryPassword = "Temporaria#2026";
+        String newPassword = "Definitiva#2026";
+        HttpResponse<String> created = postEmployee(
+                employeeMetadata("Funcionário " + prefix, registration, "Analista", email),
+                jpeg(),
+                "image/jpeg",
+                managerAccessToken(),
+                UUID.randomUUID().toString());
+        assertThat(created.statusCode()).isEqualTo(201);
+        UUID id = UUID.fromString(objectMapper.readTree(created.body()).get("id").asText());
+
+        HttpResponse<String> firstLogin = postJson(
+                "/api/v1/auth/login",
+                "{\"email\":\"" + email + "\",\"password\":\"" + temporaryPassword + "\"}",
+                null,
+                UUID.randomUUID().toString());
+        String changeToken = objectMapper.readTree(firstLogin.body()).get("token").asText();
+        HttpResponse<String> change = postJson(
+                "/api/v1/auth/change-password",
+                "{\"currentPassword\":\"" + temporaryPassword + "\",\"newPassword\":\"" + newPassword + "\"}",
+                changeToken,
+                UUID.randomUUID().toString());
+        assertThat(change.statusCode()).isEqualTo(204);
+
+        HttpResponse<String> login = postJson(
+                "/api/v1/auth/login",
+                "{\"email\":\"" + email + "\",\"password\":\"" + newPassword + "\"}",
+                null,
+                UUID.randomUUID().toString());
+        return new EmployeeLogin(id, objectMapper.readTree(login.body()).get("token").asText());
+    }
+
+    private void assertErrorCode(HttpResponse<String> response, int status, String code) throws Exception {
+        assertThat(response.statusCode()).isEqualTo(status);
+        assertThat(objectMapper.readTree(response.body()).get("code").asText()).isEqualTo(code);
+    }
+
     private String employeeMetadata(
             String name,
             String registration,
@@ -678,5 +928,8 @@ class PontoControleApplicationIntegrationTest {
     }
 
     private record ManagerSnapshot(UUID id, String email, String passwordHash) {
+    }
+
+    private record EmployeeLogin(UUID id, String token) {
     }
 }
