@@ -1,0 +1,68 @@
+name: ponto-controle-pi
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ponto}
+      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER no arquivo .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+      TZ: America/Sao_Paulo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      SERVER_ADDRESS: 0.0.0.0
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-ponto}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?Defina POSTGRES_USER no arquivo .env}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+      MANAGER_EMAIL: ${MANAGER_EMAIL:?Defina MANAGER_EMAIL no arquivo .env}
+      MANAGER_PASSWORD: ${MANAGER_PASSWORD:?Defina MANAGER_PASSWORD no arquivo .env}
+      JWT_SECRET_BASE64: ${JWT_SECRET_BASE64:?Defina JWT_SECRET_BASE64 no arquivo .env}
+      PHOTO_STORAGE_PATH: /data/photos
+      WORKPLACE_LATITUDE: ${WORKPLACE_LATITUDE:?Defina WORKPLACE_LATITUDE no arquivo .env}
+      WORKPLACE_LONGITUDE: ${WORKPLACE_LONGITUDE:?Defina WORKPLACE_LONGITUDE no arquivo .env}
+      WORKPLACE_RADIUS_METERS: ${WORKPLACE_RADIUS_METERS:-150}
+      WORKPLACE_MAX_ACCURACY_METERS: ${WORKPLACE_MAX_ACCURACY_METERS:-50}
+      MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+      TZ: America/Sao_Paulo
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - photos:/data/photos
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO- http://localhost:8080/actuator/health/readiness |
+          grep -q '"status":"UP"'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  pgdata:
+    name: ponto-controle-pi-pgdata
+  photos:
+    name: ponto-controle-pi-photos

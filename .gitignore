@@ -1,0 +1,46 @@
+# Segredos e configuração local
+.env
+.env.*
+!.env.example
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# Logs e temporários
+*.log
+tmp/
+temp/
+
+# Documentação de construção mantida somente no ambiente local
+*.md
+
+# Backend (Maven / Java)
+backend/target/
+*.class
+hs_err_pid*
+
+# Android / Gradle
+.gradle/
+**/build/
+android/local.properties
+android/.idea/
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+*.apk
+*.aab
+
+# Assinatura Android
+*.jks
+*.keystore
+keystore.properties
+
+# Dados locais: as fotos oficiais ficam no volume privado do Docker
+photos/
+pgdata/
