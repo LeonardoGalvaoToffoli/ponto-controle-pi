@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -218,7 +219,8 @@ internal fun HomeScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             AppHeader(
                 role = state.role,
-                isBusy = state.isLoading || state.isSubmitting,
+                isRefreshing = state.isLoading,
+                isSubmitting = state.isSubmitting,
                 onRefresh = onRefresh,
                 onLogout = onLogout,
             )
@@ -396,11 +398,15 @@ private fun androidx.compose.foundation.lazy.LazyListScope.employeeContent(
 @Composable
 private fun AppHeader(
     role: UserRole?,
-    isBusy: Boolean,
+    isRefreshing: Boolean,
+    isSubmitting: Boolean,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
 ) {
-    Surface(tonalElevation = 3.dp) {
+    Surface(
+        modifier = Modifier.statusBarsPadding(),
+        tonalElevation = 3.dp,
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -423,8 +429,13 @@ private fun AppHeader(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = onRefresh, enabled = !isBusy) { Text("Atualizar") }
-            TextButton(onClick = onLogout, enabled = !isBusy) { Text("Sair") }
+            TextButton(
+                onClick = onRefresh,
+                enabled = !isRefreshing && !isSubmitting,
+            ) {
+                Text(if (isRefreshing) "Atualizando..." else "Atualizar")
+            }
+            TextButton(onClick = onLogout) { Text("Sair") }
         }
     }
 }
