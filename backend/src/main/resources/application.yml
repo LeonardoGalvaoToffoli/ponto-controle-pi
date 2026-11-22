@@ -62,6 +62,15 @@ springdoc:
     tags-sorter: alpha
 
 app:
+  bootstrap-manager:
+    email: ${MANAGER_EMAIL}
+    password: ${MANAGER_PASSWORD}
+  jwt:
+    secret-base64: ${JWT_SECRET_BASE64}
+    issuer: controle-ponto-local
+    audience: controle-ponto-android
+    access-ttl: 30m
+    password-change-ttl: 10m
   photo-storage:
     path: ${PHOTO_STORAGE_PATH:./data/photos}
   workplace:

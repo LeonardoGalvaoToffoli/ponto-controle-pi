@@ -43,17 +43,23 @@ public class RequestIdFilter extends OncePerRequestFilter {
             } finally {
                 long durationMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
                 LOGGER.info(
-                        "http_request method={} path={} status={} durationMs={}",
+                        "http_request method={} path={} status={} durationMs={} errorCode={}",
                         request.getMethod(),
                         normalizedPath(request.getRequestURI()),
                         response.getStatus(),
-                        durationMillis);
+                        durationMillis,
+                        errorCode(request));
             }
         }
     }
 
     private String normalizedPath(String requestUri) {
         return UUID_PATH_SEGMENT.matcher(requestUri).replaceAll("{id}");
+    }
+
+    private String errorCode(HttpServletRequest request) {
+        Object errorCode = request.getAttribute(ApiErrorAttributes.ERROR_CODE_ATTRIBUTE);
+        return errorCode instanceof String value ? value : "-";
     }
 
     private String validRequestIdOrNew(String candidate) {

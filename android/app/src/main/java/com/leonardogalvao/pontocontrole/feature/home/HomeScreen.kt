@@ -17,6 +17,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,13 +31,17 @@ import androidx.compose.ui.unit.dp
 import com.leonardogalvao.pontocontrole.core.ui.theme.PontoControleTheme
 
 @Composable
-fun HomeRoute() {
-    HomeScreen(state = HomeUiState())
+fun HomeRoute(onLogout: () -> Unit) {
+    HomeScreen(
+        state = HomeUiState(),
+        onLogout = onLogout,
+    )
 }
 
 @Composable
 internal fun HomeScreen(
     state: HomeUiState,
+    onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize()) {
@@ -104,6 +109,14 @@ internal fun HomeScreen(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    OutlinedButton(
+                        onClick = onLogout,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Sair")
+                    }
                 }
             }
 
@@ -121,6 +134,9 @@ internal fun HomeScreen(
 @Composable
 private fun HomeScreenPreview() {
     PontoControleTheme {
-        HomeScreen(state = HomeUiState())
+        HomeScreen(
+            state = HomeUiState(),
+            onLogout = {},
+        )
     }
 }

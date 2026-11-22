@@ -35,4 +35,48 @@ public class UserAccount {
 
     protected UserAccount() {
     }
+
+    public UserAccount(
+            UUID id,
+            String email,
+            String passwordHash,
+            UserRole role,
+            boolean mustChangePassword,
+            Instant createdAt) {
+        this.id = id;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.role = role;
+        this.mustChangePassword = mustChangePassword;
+        this.createdAt = createdAt;
+    }
+
+    public UUID getId() {
+        return id;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public UserRole getRole() {
+        return role;
+    }
+
+    public boolean isMustChangePassword() {
+        return mustChangePassword;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void completePasswordChange(String newPasswordHash) {
+        this.passwordHash = newPasswordHash;
+        this.mustChangePassword = false;
+    }
 }

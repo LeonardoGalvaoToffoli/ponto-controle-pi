@@ -1,5 +1,7 @@
 package com.leonardogalvao.pontocontrole.core.navigation
 
-internal object AppDestination {
-    const val HOME = "home"
+enum class AppDestination(val route: String) {
+    LOGIN("login"),
+    HOME("home"),
+    PASSWORD_CHANGE("password-change"),
 }
