@@ -29,6 +29,7 @@ fun PontoControleApp() {
             is AppUiState.Ready -> PontoControleNavHost(
                 startDestination = state.startDestination,
                 authRepository = container.authRepository,
+                workRepository = container.workRepository,
                 sessionStore = container.sessionStore,
             )
         }

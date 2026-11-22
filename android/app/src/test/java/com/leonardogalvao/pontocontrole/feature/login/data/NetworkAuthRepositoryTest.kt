@@ -27,7 +27,7 @@ class NetworkAuthRepositoryTest {
     fun setUp() {
         server = MockWebServer().also { it.start() }
         sessionStore = InMemorySessionStore()
-        val client = ApiClient(server.url("/").toString())
+        val client = ApiClient(server.url("/").toString(), sessionStore)
         repository = NetworkAuthRepository(
             authApi = client.create(AuthApi::class.java),
             gson = client.gson,

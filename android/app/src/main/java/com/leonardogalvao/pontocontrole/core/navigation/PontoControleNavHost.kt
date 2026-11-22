@@ -7,6 +7,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.leonardogalvao.pontocontrole.core.session.SessionStore
 import com.leonardogalvao.pontocontrole.feature.home.HomeRoute
+import com.leonardogalvao.pontocontrole.feature.home.data.WorkRepository
 import com.leonardogalvao.pontocontrole.feature.login.LoginRoute
 import com.leonardogalvao.pontocontrole.feature.login.domain.AuthRepository
 import com.leonardogalvao.pontocontrole.feature.passwordchange.PasswordChangeRoute
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 fun PontoControleNavHost(
     startDestination: AppDestination,
     authRepository: AuthRepository,
+    workRepository: WorkRepository,
     sessionStore: SessionStore,
 ) {
     val navController = rememberNavController()
@@ -39,6 +41,8 @@ fun PontoControleNavHost(
         }
         composable(AppDestination.HOME.route) {
             HomeRoute(
+                workRepository = workRepository,
+                sessionStore = sessionStore,
                 onLogout = {
                     coroutineScope.launch {
                         sessionStore.clear()

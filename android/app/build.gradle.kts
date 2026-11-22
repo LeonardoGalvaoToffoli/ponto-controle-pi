@@ -53,6 +53,10 @@ dependencies {
     implementation(libs.retrofit.core)
     implementation(libs.retrofit.converter.gson)
     implementation(libs.gson)
+    implementation(libs.okhttp.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
