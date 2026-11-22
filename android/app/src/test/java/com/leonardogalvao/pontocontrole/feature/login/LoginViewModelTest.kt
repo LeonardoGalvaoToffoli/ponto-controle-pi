@@ -75,6 +75,21 @@ class LoginViewModelTest {
         assertEquals("Informe o e-mail e a senha.", viewModel.uiState.value.errorMessage)
     }
 
+    @Test
+    fun `orienta quando acesso a rede local e negado`() = runTest {
+        val viewModel = LoginViewModel(
+            FakeAuthRepository(LoginResult.Success(session(TokenPurpose.ACCESS, false))),
+            FakeSessionStore(),
+        )
+
+        viewModel.localNetworkPermissionDenied()
+
+        assertEquals(
+            "Autorize o acesso à rede local para conectar à API do Docker.",
+            viewModel.uiState.value.errorMessage,
+        )
+    }
+
     private fun session(
         purpose: TokenPurpose,
         mustChangePassword: Boolean,

@@ -1,5 +1,11 @@
 package com.leonardogalvao.pontocontrole.feature.login
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,6 +49,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.content.ContextCompat
+import com.leonardogalvao.pontocontrole.BuildConfig
 import com.leonardogalvao.pontocontrole.core.navigation.AppDestination
 import com.leonardogalvao.pontocontrole.core.session.SessionStore
 import com.leonardogalvao.pontocontrole.core.ui.theme.PontoControleTheme
@@ -60,6 +69,25 @@ fun LoginRoute(
         factory = LoginViewModel.factory(authRepository, sessionStore),
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val localNetworkPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) viewModel.submit() else viewModel.localNetworkPermissionDenied()
+    }
+
+    val submitWithLocalNetworkAccess = {
+        val needsPermission = BuildConfig.DEBUG && Build.VERSION.SDK_INT >= 37 &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_LOCAL_NETWORK,
+            ) != PackageManager.PERMISSION_GRANTED
+        if (needsPermission) {
+            localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+        } else {
+            viewModel.submit()
+        }
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.navigationEvents.collectLatest(onAuthenticated)
@@ -71,7 +99,7 @@ fun LoginRoute(
         onPasswordChanged = viewModel::onPasswordChanged,
         onTogglePasswordVisibility = viewModel::togglePasswordVisibility,
         onDismissError = viewModel::dismissError,
-        onSubmit = viewModel::submit,
+        onSubmit = submitWithLocalNetworkAccess,
     )
 }
 

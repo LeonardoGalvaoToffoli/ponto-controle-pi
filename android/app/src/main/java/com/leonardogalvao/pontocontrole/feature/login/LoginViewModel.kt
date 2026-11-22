@@ -48,6 +48,14 @@ class LoginViewModel(
         _uiState.update { it.copy(errorMessage = null) }
     }
 
+    fun localNetworkPermissionDenied() {
+        _uiState.update {
+            it.copy(
+                errorMessage = "Autorize o acesso à rede local para conectar à API do Docker.",
+            )
+        }
+    }
+
     fun submit() {
         val currentState = _uiState.value
         if (currentState.isLoading) return
