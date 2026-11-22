@@ -4,6 +4,8 @@ import com.leonardogalvao.pontocontrole.auth.dto.ChangePasswordRequest;
 import com.leonardogalvao.pontocontrole.auth.dto.LoginRequest;
 import com.leonardogalvao.pontocontrole.auth.dto.LoginResponse;
 import com.leonardogalvao.pontocontrole.auth.dto.MeResponse;
+import com.leonardogalvao.pontocontrole.employees.EmployeeService;
+import com.leonardogalvao.pontocontrole.employees.dto.EmployeeResponse;
 import com.leonardogalvao.pontocontrole.users.UserAccount;
 import com.leonardogalvao.pontocontrole.users.UserAccountRepository;
 import com.leonardogalvao.pontocontrole.users.UserRole;
@@ -26,16 +28,19 @@ public class AuthenticationService {
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
+    private final EmployeeService employeeService;
 
     public AuthenticationService(
             AuthenticationManager authenticationManager,
             UserAccountRepository userAccountRepository,
             PasswordEncoder passwordEncoder,
-            JwtTokenService jwtTokenService) {
+            JwtTokenService jwtTokenService,
+            EmployeeService employeeService) {
         this.authenticationManager = authenticationManager;
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
+        this.employeeService = employeeService;
     }
 
     @Transactional
@@ -64,7 +69,27 @@ public class AuthenticationService {
                         HttpStatus.UNAUTHORIZED,
                         "UNAUTHORIZED",
                         "A autenticação não é mais válida."));
-        return new MeResponse(account.getId(), account.getEmail(), account.getRole());
+        if (account.getRole() == UserRole.FUNCIONARIO) {
+            EmployeeResponse employee = employeeService.profile(account.getId());
+            return new MeResponse(
+                    account.getId(),
+                    account.getEmail(),
+                    account.getRole(),
+                    employee.name(),
+                    employee.registrationNumber(),
+                    employee.jobTitle(),
+                    employee.profilePhotoUrl(),
+                    employee.todayStatus());
+        }
+        return new MeResponse(
+                account.getId(),
+                account.getEmail(),
+                account.getRole(),
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     @Transactional

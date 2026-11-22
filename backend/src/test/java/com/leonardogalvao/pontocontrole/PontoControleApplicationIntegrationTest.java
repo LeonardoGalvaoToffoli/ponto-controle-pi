@@ -21,10 +21,15 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Base64;
@@ -392,6 +397,148 @@ class PontoControleApplicationIntegrationTest {
         assertError(unsupportedMediaType, 415, "UNSUPPORTED_MEDIA_TYPE", mediaTypeRequestId);
     }
 
+    @Test
+    void managerCreatesAndListsEmployeeWhoCanReadOnlyTheOwnProfilePhoto() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String email = "funcionario-" + suffix + "@empresa.local";
+        String registration = "CAD-" + suffix.toUpperCase(java.util.Locale.ROOT);
+        String temporaryPassword = "Temporaria#2026";
+        String newPassword = "Definitiva#2026";
+
+        HttpResponse<String> created = postEmployee(
+                """
+                        {
+                          "name":"  Ana Demonstração  ",
+                          "registrationNumber":"  %s  ",
+                          "jobTitle":"  Analista de Operações  ",
+                          "email":"  %s  ",
+                          "temporaryPassword":"%s"
+                        }
+                        """.formatted(registration.toLowerCase(java.util.Locale.ROOT), email.toUpperCase(), temporaryPassword),
+                jpeg(),
+                "image/jpeg",
+                managerAccessToken(),
+                UUID.randomUUID().toString());
+
+        assertThat(created.statusCode()).isEqualTo(201);
+        JsonNode createdBody = objectMapper.readTree(created.body());
+        UUID employeeId = UUID.fromString(createdBody.get("id").asText());
+        assertThat(createdBody.get("email").asText()).isEqualTo(email);
+        assertThat(createdBody.get("registrationNumber").asText()).isEqualTo(registration);
+        assertThat(createdBody.get("name").asText()).isEqualTo("Ana Demonstração");
+        assertThat(createdBody.get("todayStatus").asText()).isEqualTo("SEM_REGISTRO");
+        assertThat(created.body()).doesNotContain(temporaryPassword);
+        assertThat(Files.isRegularFile(PHOTO_STORAGE.resolve("profiles").resolve(employeeId + ".jpg"))).isTrue();
+
+        HttpResponse<String> employees = get(
+                "/api/v1/employees",
+                managerAccessToken(),
+                UUID.randomUUID().toString());
+        assertThat(employees.statusCode()).isEqualTo(200);
+        assertThat(employees.body()).contains(email, registration, "\"enteredToday\":0");
+
+        HttpResponse<String> firstLogin = postJson(
+                "/api/v1/auth/login",
+                "{\"email\":\"" + email + "\",\"password\":\"" + temporaryPassword + "\"}",
+                null,
+                UUID.randomUUID().toString());
+        String changeToken = objectMapper.readTree(firstLogin.body()).get("token").asText();
+        HttpResponse<String> change = postJson(
+                "/api/v1/auth/change-password",
+                "{\"currentPassword\":\"" + temporaryPassword + "\",\"newPassword\":\"" + newPassword + "\"}",
+                changeToken,
+                UUID.randomUUID().toString());
+        assertThat(change.statusCode()).isEqualTo(204);
+
+        HttpResponse<String> secondLogin = postJson(
+                "/api/v1/auth/login",
+                "{\"email\":\"" + email + "\",\"password\":\"" + newPassword + "\"}",
+                null,
+                UUID.randomUUID().toString());
+        String employeeToken = objectMapper.readTree(secondLogin.body()).get("token").asText();
+
+        HttpResponse<String> me = get("/api/v1/me", employeeToken, UUID.randomUUID().toString());
+        assertThat(me.statusCode()).isEqualTo(200);
+        assertThat(me.body()).contains(
+                "Ana Demonstração",
+                registration,
+                "Analista de Operações",
+                "/api/v1/employees/" + employeeId + "/photo",
+                "SEM_REGISTRO");
+
+        HttpResponse<byte[]> ownPhoto = getBytes(
+                "/api/v1/employees/" + employeeId + "/photo",
+                employeeToken,
+                UUID.randomUUID().toString());
+        assertThat(ownPhoto.statusCode()).isEqualTo(200);
+        assertThat(ownPhoto.headers().firstValue("Content-Type")).contains("image/jpeg");
+        assertThat(ownPhoto.headers().firstValue("Cache-Control")).contains("no-store");
+        assertThat(ownPhoto.body()).isEqualTo(jpeg());
+
+        HttpResponse<String> forbiddenList = get(
+                "/api/v1/employees",
+                employeeToken,
+                UUID.randomUUID().toString());
+        assertThat(forbiddenList.statusCode()).isEqualTo(403);
+
+        HttpResponse<byte[]> hiddenPhoto = getBytes(
+                "/api/v1/employees/" + UUID.randomUUID() + "/photo",
+                employeeToken,
+                UUID.randomUUID().toString());
+        assertThat(hiddenPhoto.statusCode()).isEqualTo(404);
+    }
+
+    @Test
+    void duplicateOrInvalidEmployeeDataDoesNotLeaveAProfilePhoto() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String email = "duplicidade-" + suffix + "@empresa.local";
+        String registration = "DUP-" + suffix.toUpperCase(java.util.Locale.ROOT);
+        String managerToken = managerAccessToken();
+        String metadata = employeeMetadata("Pessoa Duplicada", registration, "Assistente", email);
+
+        HttpResponse<String> created = postEmployee(
+                metadata,
+                jpeg(),
+                "image/jpeg",
+                managerToken,
+                UUID.randomUUID().toString());
+        assertThat(created.statusCode()).isEqualTo(201);
+        long photosBeforeRejections = profilePhotoCount();
+
+        HttpResponse<String> duplicateEmail = postEmployee(
+                employeeMetadata("Outro Nome", "OUT-" + suffix.toUpperCase(java.util.Locale.ROOT), "Assistente", email),
+                jpeg(),
+                "image/jpeg",
+                managerToken,
+                UUID.randomUUID().toString());
+        assertThat(duplicateEmail.statusCode()).isEqualTo(409);
+        assertThat(objectMapper.readTree(duplicateEmail.body()).get("code").asText()).isEqualTo("DUPLICATE_EMAIL");
+
+        HttpResponse<String> duplicateRegistration = postEmployee(
+                employeeMetadata("Outro Nome", registration, "Assistente", "outro-" + suffix + "@empresa.local"),
+                jpeg(),
+                "image/jpeg",
+                managerToken,
+                UUID.randomUUID().toString());
+        assertThat(duplicateRegistration.statusCode()).isEqualTo(409);
+        assertThat(objectMapper.readTree(duplicateRegistration.body()).get("code").asText())
+                .isEqualTo("DUPLICATE_REGISTRATION");
+
+        HttpResponse<String> invalidPhoto = postEmployee(
+                employeeMetadata(
+                        "Foto Inválida",
+                        "IMG-" + suffix.toUpperCase(java.util.Locale.ROOT),
+                        "Assistente",
+                        "imagem-" + suffix + "@empresa.local"),
+                "isto não é uma imagem".getBytes(StandardCharsets.UTF_8),
+                "image/jpeg",
+                managerToken,
+                UUID.randomUUID().toString());
+        assertThat(invalidPhoto.statusCode()).isEqualTo(422);
+        assertThat(objectMapper.readTree(invalidPhoto.body()).get("code").asText()).isEqualTo("INVALID_PHOTO");
+        assertThat(profilePhotoCount()).isEqualTo(photosBeforeRejections);
+    }
+
     private String managerAccessToken() throws Exception {
         HttpResponse<String> login = postJson(
                 "/api/v1/auth/login",
@@ -449,6 +596,79 @@ class PontoControleApplicationIntegrationTest {
                 .GET();
         authorize(builder, token);
         return HttpClient.newHttpClient().send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<byte[]> getBytes(String path, String token, String requestId) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create("http://127.0.0.1:" + port + path))
+                .header("X-Request-Id", requestId)
+                .GET();
+        authorize(builder, token);
+        return HttpClient.newHttpClient().send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    private HttpResponse<String> postEmployee(
+            String metadata,
+            byte[] photo,
+            String photoContentType,
+            String token,
+            String requestId) throws Exception {
+        String boundary = "PontoControle-" + UUID.randomUUID();
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        body.write(("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"metadata\"\r\n"
+                + "Content-Type: application/json\r\n\r\n"
+                + metadata + "\r\n"
+                + "--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"photo\"; filename=\"profile.jpg\"\r\n"
+                + "Content-Type: " + photoContentType + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+        body.write(photo);
+        body.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create("http://127.0.0.1:" + port + "/api/v1/employees"))
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .header("X-Request-Id", requestId)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()));
+        authorize(builder, token);
+        return HttpClient.newHttpClient().send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private String employeeMetadata(
+            String name,
+            String registration,
+            String jobTitle,
+            String email) {
+        return """
+                {
+                  "name":"%s",
+                  "registrationNumber":"%s",
+                  "jobTitle":"%s",
+                  "email":"%s",
+                  "temporaryPassword":"Temporaria#2026"
+                }
+                """.formatted(name, registration, jobTitle, email);
+    }
+
+    private byte[] jpeg() throws Exception {
+        BufferedImage image = new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB);
+        image.setRGB(0, 0, 0x1f4f78);
+        image.setRGB(1, 0, 0xffffff);
+        image.setRGB(0, 1, 0x202b33);
+        image.setRGB(1, 1, 0x54a36f);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        assertThat(ImageIO.write(image, "jpg", output)).isTrue();
+        return output.toByteArray();
+    }
+
+    private long profilePhotoCount() throws Exception {
+        Path profiles = PHOTO_STORAGE.resolve("profiles");
+        if (!Files.isDirectory(profiles)) {
+            return 0;
+        }
+        try (var paths = Files.list(profiles)) {
+            return paths.filter(Files::isRegularFile).count();
+        }
     }
 
     private void authorize(HttpRequest.Builder builder, String token) {

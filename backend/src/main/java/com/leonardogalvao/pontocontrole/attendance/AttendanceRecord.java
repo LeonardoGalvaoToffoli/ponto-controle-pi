@@ -71,4 +71,12 @@ public class AttendanceRecord {
 
     protected AttendanceRecord() {
     }
+
+    public UUID getEmployeeId() {
+        return employeeId;
+    }
+
+    public AttendanceType getType() {
+        return type;
+    }
 }

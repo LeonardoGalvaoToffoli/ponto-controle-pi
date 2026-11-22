@@ -40,6 +40,12 @@ public class SecurityConfig {
                         .hasAuthority(AuthConfiguration.AUTHORITY_PASSWORD_CHANGE)
                         .requestMatchers(HttpMethod.GET, "/api/v1/me")
                         .hasAuthority(AuthConfiguration.AUTHORITY_ACCESS)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/employees")
+                        .hasRole("GERENTE")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/employees")
+                        .hasRole("GERENTE")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/employees/*/photo")
+                        .hasAuthority(AuthConfiguration.AUTHORITY_ACCESS)
                         .anyRequest()
                         .hasAuthority(AuthConfiguration.AUTHORITY_ACCESS))
                 .exceptionHandling(exceptions -> exceptions

@@ -29,4 +29,37 @@ public class EmployeeProfile {
 
     protected EmployeeProfile() {
     }
+
+    public EmployeeProfile(
+            UUID userId,
+            String registrationNumber,
+            String name,
+            String jobTitle,
+            String profilePhotoKey) {
+        this.userId = userId;
+        this.registrationNumber = registrationNumber;
+        this.name = name;
+        this.jobTitle = jobTitle;
+        this.profilePhotoKey = profilePhotoKey;
+    }
+
+    public UUID getUserId() {
+        return userId;
+    }
+
+    public String getRegistrationNumber() {
+        return registrationNumber;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getJobTitle() {
+        return jobTitle;
+    }
+
+    public String getProfilePhotoKey() {
+        return profilePhotoKey;
+    }
 }
