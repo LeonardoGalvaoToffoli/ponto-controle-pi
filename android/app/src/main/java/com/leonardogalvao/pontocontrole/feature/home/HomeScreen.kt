@@ -29,6 +29,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -47,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -55,6 +57,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.leonardogalvao.pontocontrole.core.model.UserRole
+import com.leonardogalvao.pontocontrole.R
 import com.leonardogalvao.pontocontrole.core.session.SessionStore
 import com.leonardogalvao.pontocontrole.feature.home.data.AttendanceDto
 import com.leonardogalvao.pontocontrole.feature.home.data.EmployeeDto
@@ -419,7 +422,12 @@ private fun AppHeader(
                 ),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("CP", fontWeight = FontWeight.Bold)
+                Icon(
+                    painter = painterResource(R.drawable.ic_time_clock_logo),
+                    contentDescription = "Logo Controle de Ponto",
+                    modifier = Modifier.size(30.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text("Controle de Ponto", fontWeight = FontWeight.SemiBold)

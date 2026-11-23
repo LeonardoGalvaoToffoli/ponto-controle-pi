@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -39,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -51,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.content.ContextCompat
 import com.leonardogalvao.pontocontrole.BuildConfig
+import com.leonardogalvao.pontocontrole.R
 import com.leonardogalvao.pontocontrole.core.navigation.AppDestination
 import com.leonardogalvao.pontocontrole.core.session.SessionStore
 import com.leonardogalvao.pontocontrole.core.ui.theme.PontoControleTheme
@@ -255,11 +258,11 @@ private fun BrandHeader() {
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "CP",
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleLarge,
+            Icon(
+                painter = painterResource(R.drawable.ic_time_clock_logo),
+                contentDescription = "Logo Controle de Ponto",
+                modifier = Modifier.size(46.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }
         Text(
