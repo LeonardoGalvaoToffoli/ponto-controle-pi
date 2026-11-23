@@ -39,6 +39,7 @@ class HomeViewModel(
                     isLoading = true,
                     errorMessage = null,
                     successMessage = null,
+                    attendanceConfirmation = null,
                 )
             }
             when (_uiState.value.role) {
@@ -101,7 +102,14 @@ class HomeViewModel(
     }
 
     fun requestCamera(mode: CameraMode) {
-        _uiState.update { it.copy(cameraMode = mode, errorMessage = null) }
+        _uiState.update {
+            it.copy(
+                cameraMode = mode,
+                errorMessage = null,
+                successMessage = null,
+                attendanceConfirmation = null,
+            )
+        }
     }
 
     fun closeCamera() {
@@ -127,7 +135,13 @@ class HomeViewModel(
         }
         val photo = requireNotNull(form.photo)
         viewModelScope.launch {
-            _uiState.update { it.copy(isSubmitting = true, errorMessage = null) }
+            _uiState.update {
+                it.copy(
+                    isSubmitting = true,
+                    errorMessage = null,
+                    attendanceConfirmation = null,
+                )
+            }
             val result = repository.createEmployee(
                 metadata = CreateEmployeeDto(
                     name = form.name.trim(),
@@ -173,6 +187,8 @@ class HomeViewModel(
                     photo = file,
                 ),
                 errorMessage = null,
+                successMessage = null,
+                attendanceConfirmation = null,
             )
         }
         sendAttendance()
@@ -181,7 +197,14 @@ class HomeViewModel(
     fun sendAttendance() {
         val pending = _uiState.value.pendingAttendance ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isSubmitting = true, errorMessage = null) }
+            _uiState.update {
+                it.copy(
+                    isSubmitting = true,
+                    errorMessage = null,
+                    successMessage = null,
+                    attendanceConfirmation = null,
+                )
+            }
             when (
                 val result = repository.recordAttendance(
                     pending.idempotencyKey,
@@ -199,6 +222,11 @@ class HomeViewModel(
                             } else {
                                 "Saída registrada com sucesso."
                             },
+                            attendanceConfirmation = AttendanceConfirmation(
+                                id = result.value.id,
+                                type = result.value.type,
+                                recordedAt = result.value.recordedAt,
+                            ),
                         )
                     }
                     loadEmployee()
@@ -233,18 +261,36 @@ class HomeViewModel(
     }
 
     fun showError(message: String) {
-        _uiState.update { it.copy(errorMessage = message, successMessage = null) }
+        _uiState.update {
+            it.copy(
+                errorMessage = message,
+                successMessage = null,
+                attendanceConfirmation = null,
+            )
+        }
     }
 
     fun clearMessage() {
-        _uiState.update { it.copy(errorMessage = null, successMessage = null) }
+        _uiState.update {
+            it.copy(
+                errorMessage = null,
+                successMessage = null,
+                attendanceConfirmation = null,
+            )
+        }
     }
 
     private suspend fun handleFailure(failure: WorkResult.Failure) {
         if (failure.sessionExpired) {
             expireSession()
         } else {
-            _uiState.update { it.copy(errorMessage = failure.message, successMessage = null) }
+            _uiState.update {
+                it.copy(
+                    errorMessage = failure.message,
+                    successMessage = null,
+                    attendanceConfirmation = null,
+                )
+            }
         }
     }
 

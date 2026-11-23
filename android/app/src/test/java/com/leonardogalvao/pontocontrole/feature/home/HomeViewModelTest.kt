@@ -78,6 +78,12 @@ class HomeViewModelTest {
         assertEquals(pending.metadata, repository.attendanceAttempts[1].metadata)
         assertNull(viewModel.uiState.value.pendingAttendance)
         assertEquals("Entrada registrada com sucesso.", viewModel.uiState.value.successMessage)
+        assertEquals("attendance-1", viewModel.uiState.value.attendanceConfirmation?.id)
+        assertEquals("ENTRADA", viewModel.uiState.value.attendanceConfirmation?.type)
+        assertEquals(
+            "2026-11-22T20:00:00Z",
+            viewModel.uiState.value.attendanceConfirmation?.recordedAt,
+        )
         assertTrue(!photo.exists())
     }
 

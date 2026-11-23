@@ -21,6 +21,12 @@ data class PendingAttendance(
     val photo: File,
 )
 
+data class AttendanceConfirmation(
+    val id: String,
+    val type: String,
+    val recordedAt: String,
+)
+
 data class HomeUiState(
     val title: String = "Controle de Ponto",
     val environment: String = "Ambiente local",
@@ -37,6 +43,7 @@ data class HomeUiState(
     val cameraMode: CameraMode? = null,
     val errorMessage: String? = null,
     val successMessage: String? = null,
+    val attendanceConfirmation: AttendanceConfirmation? = null,
     val pendingAttendance: PendingAttendance? = null,
     val evidenceBytes: ByteArray? = null,
     val sessionExpired: Boolean = false,

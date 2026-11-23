@@ -3,8 +3,12 @@ package com.leonardogalvao.pontocontrole.feature.home
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.os.Build
+import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -48,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -83,25 +89,31 @@ fun HomeRoute(
     val gps = remember(context) { GpsLocationProvider(context.applicationContext) }
     var requestedCameraMode by remember { mutableStateOf<CameraMode?>(null) }
     var attendancePhoto by remember { mutableStateOf<File?>(null) }
+    var isLocatingAttendance by remember { mutableStateOf(false) }
 
     val collectLocation: (File) -> Unit = { photo ->
         scope.launch {
-            when (val result = gps.current()) {
-                is GpsResult.Success -> {
-                    val type = nextAttendanceType(state.me?.todayStatus)
-                    if (type == null) {
+            isLocatingAttendance = true
+            try {
+                when (val result = gps.current()) {
+                    is GpsResult.Success -> {
+                        val type = nextAttendanceType(state.me?.todayStatus)
+                        if (type == null) {
+                            photo.delete()
+                            viewModel.showError("O ponto de hoje já foi concluído.")
+                        } else {
+                            viewModel.prepareAttendance(photo, result.reading, type)
+                        }
+                    }
+                    is GpsResult.Failure -> {
                         photo.delete()
-                        viewModel.showError("O ponto de hoje já foi concluído.")
-                    } else {
-                        viewModel.prepareAttendance(photo, result.reading, type)
+                        viewModel.showError(result.message)
                     }
                 }
-                is GpsResult.Failure -> {
-                    photo.delete()
-                    viewModel.showError(result.message)
-                }
+            } finally {
+                isLocatingAttendance = false
+                attendancePhoto = null
             }
-            attendancePhoto = null
         }
     }
 
@@ -187,6 +199,7 @@ fun HomeRoute(
     } else {
         HomeScreen(
             state = state,
+            isLocatingAttendance = isLocatingAttendance,
             onRefresh = viewModel::refresh,
             onLogout = onLogout,
             onClearMessage = viewModel::clearMessage,
@@ -205,6 +218,7 @@ fun HomeRoute(
 @Composable
 internal fun HomeScreen(
     state: HomeUiState,
+    isLocatingAttendance: Boolean = false,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onClearMessage: () -> Unit,
@@ -237,13 +251,31 @@ internal fun HomeScreen(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
+                    if (isLocatingAttendance) {
+                        item {
+                            AttendanceProgressCard(AttendanceProgressStage.VALIDATING_LOCATION)
+                        }
+                    } else if (state.isSubmitting && state.pendingAttendance != null) {
+                        item {
+                            AttendanceProgressCard(AttendanceProgressStage.RECORDING)
+                        }
+                    }
                     state.errorMessage?.let { message ->
                         item { MessageCard(message, isError = true, onDismiss = onClearMessage) }
                     }
-                    state.successMessage?.let { message ->
+                    state.attendanceConfirmation?.let { confirmation ->
+                        item {
+                            AttendanceSuccessCard(
+                                confirmation = confirmation,
+                                subtitle = "Registro efetuado às ${formatTime(confirmation.recordedAt)}.",
+                                onDismiss = onClearMessage,
+                            )
+                        }
+                    }
+                    state.successMessage?.takeIf { state.attendanceConfirmation == null }?.let { message ->
                         item { MessageCard(message, isError = false, onDismiss = onClearMessage) }
                     }
-                    if (state.isLoading || state.isSubmitting) {
+                    if (state.isLoading || (state.isSubmitting && state.pendingAttendance == null)) {
                         item { CircularProgressIndicator(modifier = Modifier.size(24.dp)) }
                     }
                     when (state.role) {
@@ -254,6 +286,7 @@ internal fun HomeScreen(
                         )
                         UserRole.FUNCIONARIO -> employeeContent(
                             state = state,
+                            isLocatingAttendance = isLocatingAttendance,
                             onRecordAttendance = onRecordAttendance,
                             onRetryAttendance = onRetryAttendance,
                             onLoadEvidence = onLoadEvidence,
@@ -327,6 +360,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.managerContent(
 
 private fun androidx.compose.foundation.lazy.LazyListScope.employeeContent(
     state: HomeUiState,
+    isLocatingAttendance: Boolean,
     onRecordAttendance: () -> Unit,
     onRetryAttendance: () -> Unit,
     onLoadEvidence: (String) -> Unit,
@@ -360,7 +394,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.employeeContent(
             if (action != null) {
                 Button(
                     onClick = onRecordAttendance,
-                    enabled = !state.isSubmitting && state.pendingAttendance == null,
+                    enabled = !state.isSubmitting &&
+                        !isLocatingAttendance &&
+                        state.pendingAttendance == null,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                 ) {
                     Text(action, fontWeight = FontWeight.SemiBold)
@@ -441,6 +477,10 @@ private fun AppHeader(
                 onClick = onRefresh,
                 enabled = !isRefreshing && !isSubmitting,
             ) {
+                RefreshIndicator(
+                    isRefreshing = isRefreshing,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
                 Text(if (isRefreshing) "Atualizando..." else "Atualizar")
             }
             TextButton(onClick = onLogout) { Text("Sair") }
@@ -510,7 +550,26 @@ private fun StatusLabel(status: String) {
 
 @Composable
 private fun MessageCard(message: String, isError: Boolean, onDismiss: () -> Unit) {
+    val view = LocalView.current
+    val horizontalOffset = remember(message, isError) { Animatable(0f) }
+
+    LaunchedEffect(message, isError) {
+        if (isError) {
+            view.performHapticFeedback(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    HapticFeedbackConstants.REJECT
+                } else {
+                    HapticFeedbackConstants.LONG_PRESS
+                },
+            )
+            listOf(-7f, 7f, -5f, 5f, 0f).forEach { target ->
+                horizontalOffset.animateTo(target, tween(55))
+            }
+        }
+    }
+
     Surface(
+        modifier = Modifier.offset(x = horizontalOffset.value.dp),
         color = if (isError) MaterialTheme.colorScheme.errorContainer
         else MaterialTheme.colorScheme.primaryContainer,
         shape = MaterialTheme.shapes.medium,
@@ -658,4 +717,9 @@ private fun formatInstant(value: String): String = runCatching {
     Instant.parse(value).atZone(ZoneId.systemDefault()).format(DATE_TIME_FORMAT)
 }.getOrElse { value }
 
+private fun formatTime(value: String): String = runCatching {
+    Instant.parse(value).atZone(ZoneId.systemDefault()).format(TIME_FORMAT)
+}.getOrElse { value }
+
 private val DATE_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
