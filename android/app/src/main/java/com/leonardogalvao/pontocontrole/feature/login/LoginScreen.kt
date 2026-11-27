@@ -26,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -38,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -122,6 +124,12 @@ internal fun LoginScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to MaterialTheme.colorScheme.primaryContainer,
+                        0.55f to MaterialTheme.colorScheme.background,
+                    ),
+                )
                 .verticalScroll(rememberScrollState())
                 .imePadding()
                 .padding(horizontal = 24.dp, vertical = 32.dp),
@@ -192,11 +200,24 @@ internal fun LoginScreen(
                             PasswordVisualTransformation()
                         },
                         trailingIcon = {
-                            TextButton(
+                            IconButton(
                                 onClick = onTogglePasswordVisibility,
                                 enabled = !state.isLoading,
                             ) {
-                                Text(if (state.isPasswordVisible) "Ocultar" else "Mostrar")
+                                Icon(
+                                    painter = painterResource(
+                                        if (state.isPasswordVisible) {
+                                            R.drawable.ic_visibility_off
+                                        } else {
+                                            R.drawable.ic_visibility
+                                        },
+                                    ),
+                                    contentDescription = if (state.isPasswordVisible) {
+                                        "Ocultar senha"
+                                    } else {
+                                        "Mostrar senha"
+                                    },
+                                )
                             }
                         },
                         keyboardOptions = KeyboardOptions(
@@ -253,23 +274,33 @@ private fun BrandHeader() {
     ) {
         Box(
             modifier = Modifier
-                .size(64.dp)
+                .size(80.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .background(MaterialTheme.colorScheme.primary),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_time_clock_logo),
                 contentDescription = "Logo Controle de Ponto",
-                modifier = Modifier.size(46.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(54.dp),
+                tint = MaterialTheme.colorScheme.onPrimary,
             )
         }
-        Text(
-            text = "Controle de Ponto",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "Controle de Ponto",
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(
+                text = "Registre sua jornada com foto e localização",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 
