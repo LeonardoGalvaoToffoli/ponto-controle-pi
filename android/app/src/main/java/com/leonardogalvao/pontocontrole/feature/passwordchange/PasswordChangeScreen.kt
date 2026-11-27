@@ -1,7 +1,9 @@
 package com.leonardogalvao.pontocontrole.feature.passwordchange
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -17,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -27,7 +31,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -38,6 +44,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.leonardogalvao.pontocontrole.R
 import com.leonardogalvao.pontocontrole.core.navigation.AppDestination
 import com.leonardogalvao.pontocontrole.core.ui.theme.PontoControleTheme
 import com.leonardogalvao.pontocontrole.feature.login.domain.AuthRepository
@@ -90,6 +97,12 @@ internal fun PasswordChangeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to MaterialTheme.colorScheme.primaryContainer,
+                        0.55f to MaterialTheme.colorScheme.background,
+                    ),
+                )
                 .verticalScroll(rememberScrollState())
                 .imePadding()
                 .padding(horizontal = 24.dp, vertical = 32.dp),
@@ -165,16 +178,24 @@ internal fun PasswordChangeScreen(
                         },
                     )
 
-                    Text(
-                        text = "Use de 12 a 72 bytes. A nova senha deve ser diferente da temporária.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    PasswordRequirements(state)
                     TextButton(
                         onClick = onToggleVisibility,
                         enabled = !state.isLoading,
                         modifier = Modifier.align(Alignment.End),
                     ) {
+                        Icon(
+                            painter = painterResource(
+                                if (state.passwordsVisible) {
+                                    R.drawable.ic_visibility_off
+                                } else {
+                                    R.drawable.ic_visibility
+                                },
+                            ),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Text(if (state.passwordsVisible) "Ocultar senhas" else "Mostrar senhas")
                     }
 
@@ -201,6 +222,48 @@ internal fun PasswordChangeScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PasswordRequirements(state: PasswordChangeUiState) {
+    val newPasswordBytes = state.newPassword.toByteArray(Charsets.UTF_8).size
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        RequirementRow(
+            text = "Entre 12 e 72 bytes",
+            met = newPasswordBytes in 12..72,
+        )
+        RequirementRow(
+            text = "Diferente da senha temporária",
+            met = state.newPassword.isNotEmpty() && state.newPassword != state.currentPassword,
+        )
+        RequirementRow(
+            text = "Confirmação igual à nova senha",
+            met = state.confirmation.isNotEmpty() && state.confirmation == state.newPassword,
+        )
+    }
+}
+
+@Composable
+private fun RequirementRow(text: String, met: Boolean) {
+    val color = if (met) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(
+                if (met) R.drawable.ic_check_circle else R.drawable.ic_radio_unchecked,
+            ),
+            contentDescription = if (met) "Atendido" else "Pendente",
+            tint = color,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(text, color = color, style = MaterialTheme.typography.bodySmall)
     }
 }
 
