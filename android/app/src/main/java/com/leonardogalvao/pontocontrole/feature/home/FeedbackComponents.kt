@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,8 +35,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.leonardogalvao.pontocontrole.R
 
 internal enum class AttendanceProgressStage {
     VALIDATING_LOCATION,
@@ -214,10 +217,10 @@ internal fun RefreshIndicator(
         ),
         label = "refreshRotation",
     )
-    Text(
-        text = "↻",
+    Icon(
+        painter = painterResource(R.drawable.ic_refresh),
+        contentDescription = if (isRefreshing) "Atualizando" else "Atualizar",
         modifier = modifier.graphicsLayer { rotationZ = if (isRefreshing) rotation else 0f },
-        style = MaterialTheme.typography.titleMedium,
     )
 }
 

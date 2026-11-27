@@ -14,7 +14,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -30,13 +33,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,6 +53,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -58,6 +63,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,8 +76,12 @@ import com.leonardogalvao.pontocontrole.feature.home.data.EmployeeDto
 import com.leonardogalvao.pontocontrole.feature.home.data.WorkRepository
 import java.io.File
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -248,7 +258,7 @@ internal fun HomeScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+                    contentPadding = PaddingValues(20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     if (isLocatingAttendance) {
@@ -329,20 +339,38 @@ private fun androidx.compose.foundation.lazy.LazyListScope.managerContent(
     }
     item {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SummaryCard("Funcionários", state.totalEmployees.toString(), Modifier.weight(1f))
-            SummaryCard("Entraram hoje", state.enteredToday.toString(), Modifier.weight(1f))
+            SummaryCard(
+                label = "Funcionários",
+                value = state.totalEmployees.toString(),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.weight(1f),
+            )
+            SummaryCard(
+                label = "Entraram hoje",
+                value = state.enteredToday.toString(),
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
     item {
         Button(
             onClick = { onShowEmployeeForm(true) },
             enabled = !state.isSubmitting,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
         ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_person_add),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(10.dp))
             Text("Cadastrar funcionário")
         }
     }
-    item { SectionTitle("Equipe") }
+    item { SectionTitle("Equipe", count = state.employees.size) }
     if (state.employees.isEmpty()) {
         item { EmptyCard("Nenhum funcionário cadastrado.") }
     } else {
@@ -368,56 +396,51 @@ private fun androidx.compose.foundation.lazy.LazyListScope.employeeContent(
     val me = state.me
     item {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Meu expediente", style = MaterialTheme.typography.headlineSmall)
             Text(
-                me?.name?.let { "Olá, $it" } ?: "Área do funcionário",
+                me?.name?.let { "${greeting()}, ${it.substringBefore(' ')}" } ?: "Meu expediente",
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(
+                listOfNotNull(me?.jobTitle, me?.registrationNumber?.let { "Matrícula $it" })
+                    .joinToString(" · ")
+                    .ifEmpty { "Área do funcionário" },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
     if (me != null) {
         item {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    Text(me.name ?: me.email, fontWeight = FontWeight.SemiBold)
-                    me.registrationNumber?.let { Text("Matrícula: $it") }
-                    me.jobTitle?.let { Text("Cargo: $it") }
-                    StatusLabel(me.todayStatus ?: "SEM_REGISTRO")
-                }
-            }
-        }
-        item {
-            val action = attendanceAction(me.todayStatus)
-            if (action != null) {
-                Button(
-                    onClick = onRecordAttendance,
-                    enabled = !state.isSubmitting &&
-                        !isLocatingAttendance &&
-                        state.pendingAttendance == null,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                ) {
-                    Text(action, fontWeight = FontWeight.SemiBold)
-                }
-            } else {
-                EmptyCard("Expediente de hoje concluído.")
-            }
+            ShiftClockCard(
+                status = me.todayStatus ?: "SEM_REGISTRO",
+                nextType = nextAttendanceType(me.todayStatus),
+                actionEnabled = !state.isSubmitting &&
+                    !isLocatingAttendance &&
+                    state.pendingAttendance == null,
+                onRecordAttendance = onRecordAttendance,
+            )
         }
     }
     state.pendingAttendance?.let {
         item {
             Surface(
                 color = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
                 shape = MaterialTheme.shapes.medium,
             ) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text("O envio não foi concluído. A foto e a mesma chave foram preservadas.")
-                    OutlinedButton(onClick = onRetryAttendance, enabled = !state.isSubmitting) {
+                    Text("Envio pendente", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "O registro não chegou ao servidor. A foto e a mesma chave foram preservadas.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedButton(
+                        onClick = onRetryAttendance,
+                        enabled = !state.isSubmitting,
+                        modifier = Modifier.padding(top = 4.dp),
+                    ) {
                         Text("Tentar enviar novamente")
                     }
                 }
@@ -473,78 +496,320 @@ private fun AppHeader(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(
+            IconButton(
                 onClick = onRefresh,
                 enabled = !isRefreshing && !isSubmitting,
             ) {
-                RefreshIndicator(
-                    isRefreshing = isRefreshing,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-                Text(if (isRefreshing) "Atualizando..." else "Atualizar")
+                RefreshIndicator(isRefreshing = isRefreshing)
             }
-            TextButton(onClick = onLogout) { Text("Sair") }
+            IconButton(onClick = onLogout) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_exit),
+                    contentDescription = "Sair",
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun SummaryCard(label: String, value: String, modifier: Modifier = Modifier) {
-    ElevatedCard(modifier = modifier) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+private fun ShiftClockCard(
+    status: String,
+    nextType: String?,
+    actionEnabled: Boolean,
+    onRecordAttendance: () -> Unit,
+) {
+    var now by remember { mutableStateOf(LocalDateTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = LocalDateTime.now()
+            delay(1_000L - (System.currentTimeMillis() % 1_000L))
+        }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            now.format(TIME_FORMAT),
+                            style = MaterialTheme.typography.displaySmall,
+                        )
+                        Text(
+                            now.format(SECONDS_FORMAT),
+                            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp).alpha(0.7f),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                    Text(
+                        now.format(LONG_DATE_FORMAT).replaceFirstChar { it.uppercase() },
+                        modifier = Modifier.alpha(0.85f),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                StatusLabel(status, onAccent = true)
+            }
+
+            if (nextType != null) {
+                Button(
+                    onClick = onRecordAttendance,
+                    enabled = actionEnabled,
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.onPrimary,
+                        contentColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) {
+                    Icon(
+                        painter = painterResource(
+                            if (nextType == "ENTRADA") R.drawable.ic_entry else R.drawable.ic_exit,
+                        ),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        if (nextType == "ENTRADA") "Registrar entrada" else "Registrar saída",
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.alpha(0.8f),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_photo),
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text("Foto", style = MaterialTheme.typography.labelSmall)
+                    Icon(
+                        painter = painterResource(R.drawable.ic_location),
+                        contentDescription = null,
+                        modifier = Modifier.padding(start = 6.dp).size(14.dp),
+                    )
+                    Text("Localização precisa", style = MaterialTheme.typography.labelSmall)
+                }
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_check_circle),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        "Expediente de hoje concluído. Até amanhã!",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryCard(
+    label: String,
+    value: String,
+    containerColor: Color,
+    contentColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        color = containerColor,
+        contentColor = contentColor,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.alpha(0.8f))
         }
     }
 }
 
 @Composable
 private fun EmployeeCard(employee: EmployeeDto) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(employee.name, fontWeight = FontWeight.SemiBold)
-            Text("${employee.jobTitle} · Matrícula ${employee.registrationNumber}")
-            Text(employee.email, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            StatusLabel(employee.todayStatus)
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            InitialsAvatar(employee.name)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(employee.name, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "${employee.jobTitle} · Matrícula ${employee.registrationNumber}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    employee.email,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                StatusLabel(employee.todayStatus, modifier = Modifier.padding(top = 4.dp))
+            }
         }
+    }
+}
+
+@Composable
+private fun InitialsAvatar(name: String) {
+    val initials = name.trim()
+        .split(Regex("\\s+"))
+        .filter { it.isNotEmpty() }
+        .let { parts -> listOfNotNull(parts.firstOrNull(), parts.drop(1).lastOrNull()) }
+        .joinToString("") { it.first().uppercase() }
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            initials,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            style = MaterialTheme.typography.titleMedium,
+        )
     }
 }
 
 @Composable
 private fun AttendanceCard(record: AttendanceDto, onLoadEvidence: (String) -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(attendanceTypeLabel(record.type), fontWeight = FontWeight.SemiBold)
-                Text(formatInstant(record.recordedAt), style = MaterialTheme.typography.bodySmall)
+    val isEntry = record.type == "ENTRADA"
+    val badgeColor = if (isEntry) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.tertiaryContainer
+    }
+    val badgeContent = if (isEntry) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onTertiaryContainer
+    }
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 6.dp, end = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(badgeColor, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(if (isEntry) R.drawable.ic_entry else R.drawable.ic_exit),
+                    contentDescription = null,
+                    tint = badgeContent,
+                    modifier = Modifier.size(20.dp),
+                )
             }
-            Text(
-                "Distância da empresa: ${record.distanceMeters.toInt()} m",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            TextButton(onClick = { onLoadEvidence(record.photoUrl) }) {
-                Text("Ver foto de evidência")
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(attendanceTypeLabel(record.type), fontWeight = FontWeight.SemiBold)
+                    Text(
+                        formatTime(record.recordedAt),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+                Text(
+                    "${formatDate(record.recordedAt)} · ${formatDistance(record.distanceMeters)} da empresa",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(
+                    onClick = { onLoadEvidence(record.photoUrl) },
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_photo),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Ver foto de evidência")
+                }
             }
         }
     }
 }
 
 @Composable
-private fun StatusLabel(status: String) {
+private fun StatusLabel(
+    status: String,
+    modifier: Modifier = Modifier,
+    onAccent: Boolean = false,
+) {
     val text = when (status) {
-        "ENTRADA_REGISTRADA" -> "Entrada registrada"
+        "ENTRADA_REGISTRADA" -> "Em expediente"
         "SAIDA_REGISTRADA" -> "Expediente concluído"
         else -> "Sem registro hoje"
     }
+    val dotColor = when (status) {
+        "ENTRADA_REGISTRADA" -> StatusActive
+        "SAIDA_REGISTRADA" -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.outline
+    }
     Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = MaterialTheme.shapes.small,
+        modifier = modifier,
+        color = if (onAccent) {
+            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f)
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+        contentColor = if (onAccent) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        },
+        shape = CircleShape,
     ) {
-        Text(
-            text,
+        Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelMedium,
-        )
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(
+                        if (onAccent && status == "SAIDA_REGISTRADA") {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            dotColor
+                        },
+                        CircleShape,
+                    ),
+            )
+            Text(text, style = MaterialTheme.typography.labelMedium)
+        }
     }
 }
 
@@ -585,10 +850,26 @@ private fun MessageCard(message: String, isError: Boolean, onDismiss: () -> Unit
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        HorizontalDivider()
+private fun SectionTitle(text: String, count: Int? = null) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, style = MaterialTheme.typography.titleMedium)
+        if (count != null && count > 0) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                shape = CircleShape,
+            ) {
+                Text(
+                    count.toString(),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
     }
 }
 
@@ -596,10 +877,16 @@ private fun SectionTitle(text: String) {
 private fun EmptyCard(message: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         shape = MaterialTheme.shapes.medium,
     ) {
-        Text(message, modifier = Modifier.padding(16.dp))
+        Text(
+            message,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -658,11 +945,36 @@ private fun EmployeeDialog(
                     enabled = !isSubmitting,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedButton(onClick = onCamera, enabled = !isSubmitting) {
+                OutlinedButton(
+                    onClick = onCamera,
+                    enabled = !isSubmitting,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_photo),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(if (state.photo == null) "Capturar foto de perfil" else "Refazer foto")
                 }
                 if (state.photo != null) {
-                    Text("Foto capturada", color = MaterialTheme.colorScheme.primary)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_check_circle),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            "Foto capturada",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             }
         },
@@ -705,21 +1017,32 @@ private fun nextAttendanceType(status: String?): String? = when (status) {
     else -> null
 }
 
-private fun attendanceAction(status: String?): String? = when (nextAttendanceType(status)) {
-    "ENTRADA" -> "Registrar entrada"
-    "SAIDA" -> "Registrar saída"
-    else -> null
-}
-
 private fun attendanceTypeLabel(type: String) = if (type == "ENTRADA") "Entrada" else "Saída"
 
-private fun formatInstant(value: String): String = runCatching {
-    Instant.parse(value).atZone(ZoneId.systemDefault()).format(DATE_TIME_FORMAT)
+private fun greeting(): String = when (LocalTime.now().hour) {
+    in 5..11 -> "Bom dia"
+    in 12..17 -> "Boa tarde"
+    else -> "Boa noite"
+}
+
+private fun formatDate(value: String): String = runCatching {
+    Instant.parse(value).atZone(ZoneId.systemDefault()).format(DATE_FORMAT)
 }.getOrElse { value }
 
 private fun formatTime(value: String): String = runCatching {
     Instant.parse(value).atZone(ZoneId.systemDefault()).format(TIME_FORMAT)
 }.getOrElse { value }
 
-private val DATE_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+private fun formatDistance(meters: Double): String = if (meters >= 1_000) {
+    String.format(PT_BR, "%.1f km", meters / 1_000)
+} else {
+    "${meters.toInt()} m"
+}
+
+private val PT_BR: Locale = Locale.forLanguageTag("pt-BR")
+private val StatusActive = Color(0xFF3FA66B)
+private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
 private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val SECONDS_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern(":ss")
+private val LONG_DATE_FORMAT: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", PT_BR)
